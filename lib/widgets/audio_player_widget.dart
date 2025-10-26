@@ -78,10 +78,16 @@ class AudioPlayerWidget extends ConsumerWidget {
                     return GestureDetector(
                       onTapDown: (details) {
                         if (audioState.duration.inSeconds > 0) {
-                          final localPosition = details.localPosition.dx;
+                          final localPosition = details.localPosition.dx.clamp(0.0, constraints.maxWidth);
                           final width = constraints.maxWidth;
                           final percentage = (localPosition / width).clamp(0.0, 1.0);
-                          final newPosition = audioState.duration * percentage;
+                          var newPosition = audioState.duration * percentage;
+
+                          // Ensure we don't seek beyond the duration (leave 1 second buffer)
+                          if (newPosition >= audioState.duration) {
+                            newPosition = audioState.duration - const Duration(seconds: 1);
+                          }
+
                           ref.read(audioPlayerNotifierProvider.notifier).seek(newPosition);
                         }
                       },

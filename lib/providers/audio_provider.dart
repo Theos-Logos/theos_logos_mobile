@@ -180,9 +180,18 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
   }
 
   Future<void> seek(Duration position) async {
-    await _player!.seek(position);
+    // Clamp position to valid range (0 to duration - 1 second)
+    var clampedPosition = position;
+    if (state.duration.inSeconds > 0) {
+      final maxPosition = state.duration - const Duration(seconds: 1);
+      clampedPosition = Duration(
+        milliseconds: position.inMilliseconds.clamp(0, maxPosition.inMilliseconds),
+      );
+    }
+
+    await _player!.seek(clampedPosition);
     if (_currentTrack != null) {
-      await _savePosition(_currentTrack!.id, position);
+      await _savePosition(_currentTrack!.id, clampedPosition);
     }
   }
 
