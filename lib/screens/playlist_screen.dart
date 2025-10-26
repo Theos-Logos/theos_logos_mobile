@@ -204,20 +204,26 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                         onTap: () {
                           ref
                               .read(audioPlayerNotifierProvider.notifier)
-                              .playTrack(track, trackIndex);
+                              .playTrack(track, trackIndex, startPosition: Duration.zero);
                         },
                         child: Row(
                           children: [
                             SizedBox(
                               width: 24,
-                              child: Text(
-                                '${trackIndex + 1}',
-                                style: TextStyle(
-                                  color: isPlaying ? const Color(0xFFFFB300) : Colors.grey,
-                                  fontSize: 14,
-                                  fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
-                                ),
-                              ),
+                              child: track.isListened
+                                  ? const Icon(
+                                      Icons.check_circle,
+                                      size: 16,
+                                      color: Colors.green,
+                                    )
+                                  : Text(
+                                      '${trackIndex + 1}',
+                                      style: TextStyle(
+                                        color: isPlaying ? const Color(0xFFFFB300) : Colors.grey,
+                                        fontSize: 14,
+                                        fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
+                                      ),
+                                    ),
                             ),
                             const SizedBox(width: 16),
                             Expanded(

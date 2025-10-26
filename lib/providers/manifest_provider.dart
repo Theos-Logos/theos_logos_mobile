@@ -91,6 +91,7 @@ class ManifestNotifier extends AsyncNotifier<List<AudioTrack>> {
         allTracks.add(track.copyWith(
           isDownloaded: existingTrack.isDownloaded,
           localPath: existingTrack.localPath,
+          isListened: existingTrack.isListened,
         ));
       }
 
@@ -185,6 +186,27 @@ class ManifestNotifier extends AsyncNotifier<List<AudioTrack>> {
   Future<void> clearNewTracks() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('new_tracks');
+  }
+
+  Future<void> markAsListened(String trackId) async {
+    final tracks = state.value;
+    if (tracks == null) return;
+
+    final trackIndex = tracks.indexWhere((t) => t.id == trackId);
+    if (trackIndex == -1) return;
+
+    final updatedTrack = tracks[trackIndex].copyWith(isListened: true);
+    final updatedTracks = List<AudioTrack>.from(tracks);
+    updatedTracks[trackIndex] = updatedTrack;
+
+    // Cache updated tracks
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      tracksKey,
+      json.encode(updatedTracks.map((t) => t.toJson()).toList()),
+    );
+
+    state = AsyncValue.data(updatedTracks);
   }
 }
 

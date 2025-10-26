@@ -2,6 +2,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/audio_track.dart';
+import 'manifest_provider.dart';
 
 class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
   final AudioPlayer _player = AudioPlayer();
@@ -15,6 +16,9 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
       _player.dispose();
     });
 
+    // Set up stream listeners once
+    _setupStreamListeners();
+
     _loadLastPlayedPosition();
     return AudioPlayerState(
       isPlaying: false,
@@ -23,6 +27,33 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
       duration: Duration.zero,
       currentIndex: null,
     );
+  }
+
+  void _setupStreamListeners() {
+    // Listen to player state
+    _player.playingStream.listen((playing) {
+      state = state.copyWith(isPlaying: playing);
+    });
+
+    _player.positionStream.listen((position) {
+      state = state.copyWith(position: position);
+      if (_currentTrack != null) {
+        _savePosition(_currentTrack!.id, position);
+      }
+    });
+
+    _player.durationStream.listen((duration) {
+      if (duration != null) {
+        state = state.copyWith(duration: duration);
+      }
+    });
+
+    // Listen to player completion
+    _player.playerStateStream.listen((playerState) {
+      if (playerState.processingState == ProcessingState.completed) {
+        _onTrackCompleted();
+      }
+    });
   }
 
   Future<void> _loadLastPlayedPosition() async {
@@ -66,22 +97,6 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
       }
 
       await _player.play();
-
-      // Listen to player state
-      _player.playingStream.listen((playing) {
-        state = state.copyWith(isPlaying: playing);
-      });
-
-      _player.positionStream.listen((position) {
-        state = state.copyWith(position: position);
-        _savePosition(track.id, position);
-      });
-
-      _player.durationStream.listen((duration) {
-        if (duration != null) {
-          state = state.copyWith(duration: duration);
-        }
-      });
 
       state = state.copyWith(
         currentTrack: track,
@@ -127,6 +142,27 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
       await prefs.setInt('last_position_$trackId', position.inMilliseconds);
     } catch (e) {
       print('Error saving position: $e');
+    }
+  }
+
+  Future<void> _onTrackCompleted() async {
+    if (_currentTrack == null || _currentIndex == null) return;
+
+    // Mark current track as listened
+    await ref.read(manifestNotifierProvider.notifier).markAsListened(_currentTrack!.id);
+
+    // Get all tracks to find the next one
+    final tracks = ref.read(manifestNotifierProvider).value;
+    if (tracks == null || tracks.isEmpty) return;
+
+    // Play next track if available
+    final nextIndex = _currentIndex! + 1;
+    if (nextIndex < tracks.length) {
+      final nextTrack = tracks[nextIndex];
+      await playTrack(nextTrack, nextIndex, startPosition: Duration.zero);
+    } else {
+      // No more tracks, stop playing
+      state = state.copyWith(isPlaying: false);
     }
   }
 

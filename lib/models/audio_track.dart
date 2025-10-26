@@ -7,6 +7,7 @@ class AudioTrack {
   final DateTime? dateAdded;
   bool isDownloaded;
   String? localPath;
+  bool isListened;
 
   AudioTrack({
     required this.id,
@@ -17,6 +18,7 @@ class AudioTrack {
     this.dateAdded,
     this.isDownloaded = false,
     this.localPath,
+    this.isListened = false,
   });
 
   factory AudioTrack.fromJson(Map<String, dynamic> json) {
@@ -26,11 +28,12 @@ class AudioTrack {
       fileName: json['file_name'] as String,
       url: json['url'] as String,
       order: json['order'] as int,
-      dateAdded: json['date_added'] != null 
+      dateAdded: json['date_added'] != null
           ? DateTime.parse(json['date_added'] as String)
           : null,
       isDownloaded: json['is_downloaded'] as bool? ?? false,
       localPath: json['local_path'] as String?,
+      isListened: json['is_listened'] as bool? ?? false,
     );
   }
 
@@ -44,6 +47,7 @@ class AudioTrack {
       'date_added': dateAdded?.toIso8601String(),
       'is_downloaded': isDownloaded,
       'local_path': localPath,
+      'is_listened': isListened,
     };
   }
 
@@ -56,6 +60,7 @@ class AudioTrack {
     DateTime? dateAdded,
     bool? isDownloaded,
     String? localPath,
+    bool? isListened,
   }) {
     return AudioTrack(
       id: id ?? this.id,
@@ -66,6 +71,7 @@ class AudioTrack {
       dateAdded: dateAdded ?? this.dateAdded,
       isDownloaded: isDownloaded ?? this.isDownloaded,
       localPath: localPath ?? this.localPath,
+      isListened: isListened ?? this.isListened,
     );
   }
 }
