@@ -5,19 +5,22 @@ import '../models/audio_track.dart';
 import 'manifest_provider.dart';
 
 class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
-  final AudioPlayer _player = AudioPlayer();
+  AudioPlayer? _player;
   AudioTrack? _currentTrack;
   int? _currentIndex;
 
   @override
   AudioPlayerState build() {
-    // Dispose the audio player when the provider is disposed
-    ref.onDispose(() {
-      _player.dispose();
-    });
+    // Initialize player
+    _player = AudioPlayer();
 
     // Set up stream listeners once
     _setupStreamListeners();
+
+    // Dispose the audio player when the provider is disposed
+    ref.onDispose(() {
+      _player?.dispose();
+    });
 
     _loadLastPlayedPosition();
     return AudioPlayerState(
@@ -31,25 +34,25 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
 
   void _setupStreamListeners() {
     // Listen to player state
-    _player.playingStream.listen((playing) {
+    _player!.playingStream.listen((playing) {
       state = state.copyWith(isPlaying: playing);
     });
 
-    _player.positionStream.listen((position) {
+    _player!.positionStream.listen((position) {
       state = state.copyWith(position: position);
       if (_currentTrack != null) {
         _savePosition(_currentTrack!.id, position);
       }
     });
 
-    _player.durationStream.listen((duration) {
+    _player!.durationStream.listen((duration) {
       if (duration != null) {
         state = state.copyWith(duration: duration);
       }
     });
 
     // Listen to player completion
-    _player.playerStateStream.listen((playerState) {
+    _player!.playerStateStream.listen((playerState) {
       if (playerState.processingState == ProcessingState.completed) {
         _onTrackCompleted();
       }
@@ -78,56 +81,69 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
       _currentTrack = track;
       _currentIndex = index;
 
+      // Stop and reset player if needed
+      if (_player!.playing) {
+        await _player!.stop();
+      }
+
+      // Update state immediately to show the track in UI
+      state = state.copyWith(
+        currentTrack: track,
+        currentIndex: index,
+        position: Duration.zero,
+        duration: Duration.zero,
+      );
+
       // Use local path if downloaded, otherwise stream from URL
       final audioSource = track.isDownloaded && track.localPath != null
           ? AudioSource.file(track.localPath!)
           : AudioSource.uri(Uri.parse(track.url));
 
-      await _player.setAudioSource(audioSource);
+      await _player!.setAudioSource(audioSource);
 
       // Restore position if provided or load saved position
       if (startPosition != null) {
-        await _player.seek(startPosition);
+        await _player!.seek(startPosition);
       } else {
         final prefs = await SharedPreferences.getInstance();
         final savedPosition = prefs.getInt('last_position_${track.id}');
         if (savedPosition != null && savedPosition > 0) {
-          await _player.seek(Duration(milliseconds: savedPosition));
+          await _player!.seek(Duration(milliseconds: savedPosition));
         }
       }
 
-      await _player.play();
+      await _player!.play();
 
-      state = state.copyWith(
-        currentTrack: track,
-        isPlaying: true,
-        currentIndex: index,
-      );
+      // The isPlaying state will be updated by the stream listener
     } catch (e) {
       print('Error playing track: $e');
+      // Reset state on error
+      state = state.copyWith(
+        isPlaying: false,
+      );
     }
   }
 
   Future<void> pause() async {
-    await _player.pause();
+    await _player!.pause();
     if (_currentTrack != null) {
-      await _savePosition(_currentTrack!.id, _player.position);
+      await _savePosition(_currentTrack!.id, _player!.position);
     }
   }
 
   Future<void> resume() async {
-    await _player.play();
+    await _player!.play();
   }
 
   Future<void> seek(Duration position) async {
-    await _player.seek(position);
+    await _player!.seek(position);
     if (_currentTrack != null) {
       await _savePosition(_currentTrack!.id, position);
     }
   }
 
   Future<void> stop() async {
-    await _player.stop();
+    await _player!.stop();
     state = state.copyWith(
       isPlaying: false,
       position: Duration.zero,
