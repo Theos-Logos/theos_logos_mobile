@@ -6,15 +6,7 @@ class AudioPlayerWidget extends ConsumerWidget {
   const AudioPlayerWidget({super.key});
 
   String _formatDuration(Duration duration) {
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-    
-    if (hours > 0) {
-      return '$hours:${twoDigits(minutes)}:${twoDigits(seconds)}';
-    }
-    return '${twoDigits(minutes)}:${twoDigits(seconds)}';
+    return '${duration.inSeconds}s';
   }
 
   @override
@@ -23,114 +15,129 @@ class AudioPlayerWidget extends ConsumerWidget {
     final track = audioState.currentTrack;
 
     if (track == null) {
-      return const SizedBox.shrink();
+      return Container(
+        margin: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFF2a2a2a),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey[800],
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'No track selected',
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 16),
+            IconButton(
+              icon: const Icon(Icons.play_arrow, color: Colors.grey),
+              onPressed: null,
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.grey),
+              onPressed: null,
+            ),
+          ],
+        ),
+      );
     }
 
     return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Theme.of(context).cardColor,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, -2),
-          ),
-        ],
+        color: const Color(0xFF2a2a2a),
+        borderRadius: BorderRadius.circular(12),
       ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+      child: Row(
         children: [
-          // Progress bar
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-              trackHeight: 2,
-            ),
-            child: Slider(
-              value: audioState.position.inSeconds.toDouble(),
-              max: audioState.duration.inSeconds.toDouble().clamp(1.0, double.infinity),
-              onChanged: (value) {
-                ref
-                    .read(audioPlayerNotifierProvider.notifier)
-                    .seek(Duration(seconds: value.toInt()));
-              },
-            ),
-          ),
-          
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  _formatDuration(audioState.position),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-                Text(
-                  _formatDuration(audioState.duration),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-          
-          // Player controls
-          Padding(
-            padding: const EdgeInsets.all(16.0),
+          Expanded(
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  track.title,
-                  style: Theme.of(context).textTheme.titleMedium,
-                  textAlign: TextAlign.center,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.replay_10),
-                      iconSize: 32,
-                      onPressed: () {
-                        final newPosition = audioState.position - const Duration(seconds: 10);
-                        ref
-                            .read(audioPlayerNotifierProvider.notifier)
-                            .seek(newPosition < Duration.zero ? Duration.zero : newPosition);
-                      },
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton(
-                      icon: Icon(
-                        audioState.isPlaying ? Icons.pause_circle : Icons.play_circle,
-                        size: 64,
-                      ),
-                      onPressed: () {
-                        if (audioState.isPlaying) {
-                          ref.read(audioPlayerNotifierProvider.notifier).pause();
-                        } else {
-                          ref.read(audioPlayerNotifierProvider.notifier).resume();
+                // Progress bar
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    return GestureDetector(
+                      onTapDown: (details) {
+                        if (audioState.duration.inSeconds > 0) {
+                          final localPosition = details.localPosition.dx;
+                          final width = constraints.maxWidth;
+                          final percentage = (localPosition / width).clamp(0.0, 1.0);
+                          final newPosition = audioState.duration * percentage;
+                          ref.read(audioPlayerNotifierProvider.notifier).seek(newPosition);
                         }
                       },
-                    ),
-                    const SizedBox(width: 16),
-                    IconButton(
-                      icon: const Icon(Icons.forward_10),
-                      iconSize: 32,
-                      onPressed: () {
-                        final newPosition = audioState.position + const Duration(seconds: 10);
-                        ref
-                            .read(audioPlayerNotifierProvider.notifier)
-                            .seek(newPosition > audioState.duration 
-                                ? audioState.duration 
-                                : newPosition);
-                      },
-                    ),
-                  ],
+                      child: Stack(
+                        children: [
+                          Container(
+                            height: 4,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[800],
+                              borderRadius: BorderRadius.circular(2),
+                            ),
+                          ),
+                          FractionallySizedBox(
+                            widthFactor: audioState.duration.inSeconds > 0
+                                ? (audioState.position.inSeconds / audioState.duration.inSeconds).clamp(0.0, 1.0)
+                                : 0.0,
+                            child: Container(
+                              height: 4,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFB300),
+                                borderRadius: BorderRadius.circular(2),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${_formatDuration(audioState.position)} / ${_formatDuration(audioState.duration)}',
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: 16),
+          IconButton(
+            icon: Icon(
+              audioState.isPlaying ? Icons.pause : Icons.play_arrow,
+              color: Colors.white,
+            ),
+            onPressed: () {
+              if (audioState.isPlaying) {
+                ref.read(audioPlayerNotifierProvider.notifier).pause();
+              } else {
+                ref.read(audioPlayerNotifierProvider.notifier).resume();
+              }
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh, color: Colors.white),
+            onPressed: () {
+              ref.read(audioPlayerNotifierProvider.notifier).seek(Duration.zero);
+            },
           ),
         ],
       ),

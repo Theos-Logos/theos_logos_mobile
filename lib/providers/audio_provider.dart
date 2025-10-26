@@ -1,18 +1,20 @@
 import 'package:just_audio/just_audio.dart';
-import 'package:riverpod_annotation/riverpod_annotation.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/audio_track.dart';
 
-part 'audio_provider.g.dart';
-
-@riverpod
-class AudioPlayerNotifier extends _$AudioPlayerNotifier {
+class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
   final AudioPlayer _player = AudioPlayer();
   AudioTrack? _currentTrack;
   int? _currentIndex;
 
   @override
   AudioPlayerState build() {
+    // Dispose the audio player when the provider is disposed
+    ref.onDispose(() {
+      _player.dispose();
+    });
+
     _loadLastPlayedPosition();
     return AudioPlayerState(
       isPlaying: false,
@@ -28,28 +30,30 @@ class AudioPlayerNotifier extends _$AudioPlayerNotifier {
       final prefs = await SharedPreferences.getInstance();
       final lastTrackId = prefs.getString('last_track_id');
       final lastPosition = prefs.getInt('last_position') ?? 0;
-      
+
       if (lastTrackId != null) {
         // We'll restore this when the track is loaded
-        print('Last played: $lastTrackId at ${Duration(milliseconds: lastPosition)}');
+        print(
+            'Last played: $lastTrackId at ${Duration(milliseconds: lastPosition)}');
       }
     } catch (e) {
       print('Error loading last played position: $e');
     }
   }
 
-  Future<void> playTrack(AudioTrack track, int index, {Duration? startPosition}) async {
+  Future<void> playTrack(AudioTrack track, int index,
+      {Duration? startPosition}) async {
     try {
       _currentTrack = track;
       _currentIndex = index;
-      
+
       // Use local path if downloaded, otherwise stream from URL
       final audioSource = track.isDownloaded && track.localPath != null
           ? AudioSource.file(track.localPath!)
           : AudioSource.uri(Uri.parse(track.url));
-      
+
       await _player.setAudioSource(audioSource);
-      
+
       // Restore position if provided or load saved position
       if (startPosition != null) {
         await _player.seek(startPosition);
@@ -60,25 +64,25 @@ class AudioPlayerNotifier extends _$AudioPlayerNotifier {
           await _player.seek(Duration(milliseconds: savedPosition));
         }
       }
-      
+
       await _player.play();
-      
+
       // Listen to player state
       _player.playingStream.listen((playing) {
         state = state.copyWith(isPlaying: playing);
       });
-      
+
       _player.positionStream.listen((position) {
         state = state.copyWith(position: position);
         _savePosition(track.id, position);
       });
-      
+
       _player.durationStream.listen((duration) {
         if (duration != null) {
           state = state.copyWith(duration: duration);
         }
       });
-      
+
       state = state.copyWith(
         currentTrack: track,
         isPlaying: true,
@@ -131,7 +135,7 @@ class AudioPlayerNotifier extends _$AudioPlayerNotifier {
       final prefs = await SharedPreferences.getInstance();
       final lastTrackId = prefs.getString('last_track_id');
       final lastPosition = prefs.getInt('last_position');
-      
+
       if (lastTrackId != null && lastPosition != null) {
         return {
           'trackId': lastTrackId,
@@ -142,12 +146,6 @@ class AudioPlayerNotifier extends _$AudioPlayerNotifier {
       print('Error getting last played info: $e');
     }
     return null;
-  }
-
-  @override
-  void dispose() {
-    _player.dispose();
-    super.dispose();
   }
 }
 
@@ -182,3 +180,9 @@ class AudioPlayerState {
     );
   }
 }
+
+// Provider declaration
+final audioPlayerNotifierProvider =
+    NotifierProvider<AudioPlayerNotifier, AudioPlayerState>(() {
+  return AudioPlayerNotifier();
+});

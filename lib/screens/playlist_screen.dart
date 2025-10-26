@@ -77,13 +77,84 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Theos Logos'),
+        toolbarHeight: 70,
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF2a2a2a),
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text('Rdz', style: TextStyle(fontSize: 14)),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              icon: const Icon(Icons.chevron_left, size: 20),
+              onPressed: () {},
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFF2a2a2a),
+                padding: const EdgeInsets.all(8),
+                minimumSize: const Size(36, 36),
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              icon: const Icon(Icons.chevron_right, size: 20),
+              onPressed: () {},
+              style: IconButton.styleFrom(
+                backgroundColor: const Color(0xFF2a2a2a),
+                padding: const EdgeInsets.all(8),
+                minimumSize: const Size(36, 36),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Container(
+                height: 40,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2a2a2a),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: 'Wyszukaj',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(color: Colors.grey),
+                        ),
+                        style: TextStyle(fontSize: 14),
+                      ),
+                    ),
+                    Icon(Icons.search, color: Colors.grey, size: 20),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: () {
-              ref.read(manifestNotifierProvider.notifier).syncManifest();
-            },
+            icon: const Icon(Icons.help_outline),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.favorite_border),
+            onPressed: () {},
+          ),
+          Container(
+            margin: const EdgeInsets.only(right: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF2a2a2a),
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: const Center(
+              child: Text('Jp', style: TextStyle(fontSize: 14)),
+            ),
           ),
         ],
       ),
@@ -96,58 +167,113 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
           }
 
           return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(
                 child: ListView.builder(
-                  itemCount: tracks.length,
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  itemCount: tracks.length + 1, // +1 for the header
                   itemBuilder: (context, index) {
-                    final track = tracks[index];
-                    final isPlaying = audioState.currentIndex == index;
+                    // First item is the header
+                    if (index == 0) {
+                      return const Padding(
+                        padding: EdgeInsets.symmetric(vertical: 24.0),
+                        child: Text(
+                          'Theos Logos',
+                          style: TextStyle(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w300,
+                            color: Colors.white,
+                          ),
+                        ),
+                      );
+                    }
 
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: isPlaying ? Colors.blue : Colors.grey,
-                        child: isPlaying
-                            ? const Icon(Icons.play_arrow, color: Colors.white)
-                            : Text('${index + 1}'),
+                    final trackIndex = index - 1;
+                    final track = tracks[trackIndex];
+                    final isPlaying = audioState.currentIndex == trackIndex;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFF2a2a2a),
+                        borderRadius: BorderRadius.circular(8),
                       ),
-                      title: Text(
-                        track.title,
-                        style: TextStyle(
-                          fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
+                      child: InkWell(
+                        onTap: () {
+                          ref
+                              .read(audioPlayerNotifierProvider.notifier)
+                              .playTrack(track, trackIndex);
+                        },
+                        child: Row(
+                          children: [
+                            SizedBox(
+                              width: 24,
+                              child: Text(
+                                '${trackIndex + 1}',
+                                style: TextStyle(
+                                  color: isPlaying ? const Color(0xFFFFB300) : Colors.grey,
+                                  fontSize: 14,
+                                  fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 16),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    track.title,
+                                    style: TextStyle(
+                                      color: Colors.grey[400],
+                                      fontSize: 14,
+                                      fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        track.isDownloaded ? Icons.download_done : Icons.cloud_download,
+                                        size: 14,
+                                        color: track.isDownloaded ? Colors.green : Colors.grey,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        track.isDownloaded ? 'Downloaded' : 'Streaming',
+                                        style: TextStyle(
+                                          color: Colors.grey[600],
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (!track.isDownloaded)
+                              IconButton(
+                                icon: const Icon(Icons.download, color: Colors.white, size: 20),
+                                onPressed: () {
+                                  ref
+                                      .read(manifestNotifierProvider.notifier)
+                                      .downloadTrack(track.id);
+                                },
+                                padding: EdgeInsets.zero,
+                                constraints: const BoxConstraints(),
+                              ),
+                          ],
                         ),
                       ),
-                      subtitle: Row(
-                        children: [
-                          if (track.isDownloaded)
-                            const Icon(Icons.download_done, size: 16, color: Colors.green)
-                          else
-                            const Icon(Icons.cloud_download, size: 16, color: Colors.grey),
-                          const SizedBox(width: 4),
-                          Text(track.isDownloaded ? 'Downloaded' : 'Streaming'),
-                        ],
-                      ),
-                      trailing: track.isDownloaded
-                          ? null
-                          : IconButton(
-                              icon: const Icon(Icons.download),
-                              onPressed: () {
-                                ref
-                                    .read(manifestNotifierProvider.notifier)
-                                    .downloadTrack(track.id);
-                              },
-                            ),
-                      onTap: () {
-                        ref
-                            .read(audioPlayerNotifierProvider.notifier)
-                            .playTrack(track, index);
-                      },
                     );
                   },
                 ),
               ),
-              if (audioState.currentTrack != null)
-                const AudioPlayerWidget(),
+              const AudioPlayerWidget(),
             ],
           );
         },

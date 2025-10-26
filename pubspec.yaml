@@ -16,7 +16,6 @@ dependencies:
   
   # State management
   flutter_riverpod: ^2.4.9
-  riverpod_annotation: ^2.3.3
   
   # Navigation
   go_router: ^13.0.0
@@ -40,8 +39,6 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^3.0.0
-  build_runner: ^2.4.7
-  riverpod_generator: ^2.3.9
 
 flutter:
   uses-material-design: true
