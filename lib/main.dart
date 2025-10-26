@@ -15,7 +15,7 @@ class TheosLogosApp extends ConsumerWidget {
     final router = ref.watch(appRouterProvider);
 
     return MaterialApp.router(
-      title: 'Theos Logos Mobile',
+      title: 'Theos Logos',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,

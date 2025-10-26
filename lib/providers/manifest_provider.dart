@@ -208,6 +208,24 @@ class ManifestNotifier extends AsyncNotifier<List<AudioTrack>> {
 
     state = AsyncValue.data(updatedTracks);
   }
+
+  Future<void> clearAllListened() async {
+    final tracks = state.value;
+    if (tracks == null) return;
+
+    final updatedTracks = tracks.map((track) {
+      return track.copyWith(isListened: false);
+    }).toList();
+
+    // Cache updated tracks
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      tracksKey,
+      json.encode(updatedTracks.map((t) => t.toJson()).toList()),
+    );
+
+    state = AsyncValue.data(updatedTracks);
+  }
 }
 
 // Provider declaration

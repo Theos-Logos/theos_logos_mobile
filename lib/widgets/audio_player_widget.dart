@@ -38,7 +38,7 @@ class AudioPlayerWidget extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'No track selected',
+                    'Nie wybrano nagrania',
                     style: TextStyle(color: Colors.grey, fontSize: 12),
                   ),
                 ],

@@ -8,6 +8,9 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
   AudioPlayer? _player;
   AudioTrack? _currentTrack;
   int? _currentIndex;
+  String? _lastCompletedTrackId;
+  bool _isTransitioning = false;
+  DateTime? _trackStartTime;
 
   @override
   AudioPlayerState build() {
@@ -54,7 +57,31 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
     // Listen to player completion
     _player!.playerStateStream.listen((playerState) {
       if (playerState.processingState == ProcessingState.completed) {
-        _onTrackCompleted();
+        // Ignore completion events during track transitions
+        if (_isTransitioning) return;
+
+        // Only handle completion if we have a track and haven't already handled it
+        if (_currentTrack != null &&
+            _lastCompletedTrackId != _currentTrack!.id &&
+            state.duration.inSeconds > 0) {
+
+          // Check that the track has been playing for at least 3 seconds
+          // This prevents false completions on track start
+          if (_trackStartTime != null) {
+            final playDuration = DateTime.now().difference(_trackStartTime!);
+            if (playDuration.inSeconds < 3) {
+              return; // Track just started, ignore completion
+            }
+          }
+
+          final position = state.position.inSeconds;
+          final duration = state.duration.inSeconds;
+          // Check if we're within 3 seconds of the end AND position is not 0
+          // (natural completion means we're near the end, not at the beginning)
+          if (position > 0 && duration - position < 3) {
+            _onTrackCompleted();
+          }
+        }
       }
     });
   }
@@ -78,6 +105,9 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
   Future<void> playTrack(AudioTrack track, int index,
       {Duration? startPosition}) async {
     try {
+      // Mark that we're transitioning to prevent completion events
+      _isTransitioning = true;
+
       _currentTrack = track;
       _currentIndex = index;
 
@@ -114,9 +144,23 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
 
       await _player!.play();
 
+      // Mark when the track started playing
+      _trackStartTime = DateTime.now();
+
+      // Reset completion tracking AFTER the track has started playing
+      // This prevents completion events during track transition from affecting the new track
+      _lastCompletedTrackId = null;
+
+      // End transition state after a short delay to ensure everything is settled
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _isTransitioning = false;
+      });
+
       // The isPlaying state will be updated by the stream listener
     } catch (e) {
       print('Error playing track: $e');
+      // Reset transition state on error
+      _isTransitioning = false;
       // Reset state on error
       state = state.copyWith(
         isPlaying: false,
@@ -164,17 +208,28 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
   Future<void> _onTrackCompleted() async {
     if (_currentTrack == null || _currentIndex == null) return;
 
-    // Mark current track as listened
-    await ref.read(manifestNotifierProvider.notifier).markAsListened(_currentTrack!.id);
+    // Already transitioning? Don't trigger completion again
+    if (_isTransitioning) return;
+
+    // Store the track ID that just completed BEFORE doing anything else
+    final completedTrackId = _currentTrack!.id;
+
+    // Prevent marking the same track multiple times
+    if (_lastCompletedTrackId == completedTrackId) return;
+    _lastCompletedTrackId = completedTrackId;
 
     // Get all tracks to find the next one
     final tracks = ref.read(manifestNotifierProvider).value;
     if (tracks == null || tracks.isEmpty) return;
 
+    // Mark the completed track as listened (do this AFTER getting next track but BEFORE playing)
+    await ref.read(manifestNotifierProvider.notifier).markAsListened(completedTrackId);
+
     // Play next track if available
     final nextIndex = _currentIndex! + 1;
     if (nextIndex < tracks.length) {
       final nextTrack = tracks[nextIndex];
+      // playTrack will set _isTransitioning = true
       await playTrack(nextTrack, nextIndex, startPosition: Duration.zero);
     } else {
       // No more tracks, stop playing

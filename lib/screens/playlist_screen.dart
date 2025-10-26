@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../models/audio_track.dart';
 import '../providers/manifest_provider.dart';
 import '../providers/audio_provider.dart';
@@ -80,7 +81,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
         data: (tracks) {
           if (tracks.isEmpty) {
             return const Center(
-              child: Text('No tracks available'),
+              child: Text('Brak dostępnych nagrań'),
             );
           }
 
@@ -94,15 +95,67 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                   itemBuilder: (context, index) {
                     // First item is the header
                     if (index == 0) {
-                      return const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 24.0),
-                        child: Text(
-                          'Theos Logos',
-                          style: TextStyle(
-                            fontSize: 32,
-                            fontWeight: FontWeight.w300,
-                            color: Colors.white,
-                          ),
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 24.0),
+                        child: Row(
+                          children: [
+                            Image.network(
+                              'https://theos-logos.pl/logoTXT.png',
+                              height: 40,
+                              errorBuilder: (context, error, stackTrace) {
+                                return const Icon(Icons.error, color: Colors.red);
+                              },
+                            ),
+                            const SizedBox(width: 12),
+                            const Text(
+                              'Theos Logos',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w300,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(Icons.refresh, color: Colors.white70),
+                              tooltip: 'Wyczyść odsłuchane',
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => AlertDialog(
+                                    title: const Text('Wyczyść odsłuchane'),
+                                    content: const Text('Czy na pewno chcesz wyczyścić status wszystkich odsłuchanych nagrań?'),
+                                    actions: [
+                                      TextButton(
+                                        onPressed: () => Navigator.of(context).pop(),
+                                        child: const Text('Anuluj'),
+                                      ),
+                                      TextButton(
+                                        onPressed: () {
+                                          ref.read(manifestNotifierProvider.notifier).clearAllListened();
+                                          Navigator.of(context).pop();
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            const SnackBar(
+                                              content: Text('Wyczyszczono status odsłuchanych nagrań'),
+                                              duration: Duration(seconds: 2),
+                                            ),
+                                          );
+                                        },
+                                        child: const Text('Wyczyść'),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.favorite, color: Color(0xFFFFB300)),
+                              tooltip: 'Wspomóż',
+                              onPressed: () {
+                                context.push('/support');
+                              },
+                            ),
+                          ],
                         ),
                       );
                     }
@@ -168,7 +221,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        track.isDownloaded ? 'Downloaded' : 'Streaming',
+                                        track.isDownloaded ? 'Pobrane' : 'Strumieniowanie',
                                         style: TextStyle(
                                           color: Colors.grey[600],
                                           fontSize: 12,
