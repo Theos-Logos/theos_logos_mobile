@@ -25,8 +25,9 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
   }
 
   Future<void> _checkForNewTracks() async {
-    final newTracks = await ref.read(manifestNotifierProvider.notifier).getNewTracks();
-    
+    final newTracks =
+        await ref.read(manifestNotifierProvider.notifier).getNewTracks();
+
     if (newTracks.isNotEmpty && mounted) {
       _showWhatsNewDialog(newTracks);
     }
@@ -36,7 +37,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('What\'s New'),
+        title: const Text('Co nowego?'),
         content: SizedBox(
           width: double.maxFinite,
           child: ListView.builder(
@@ -48,7 +49,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                 leading: const Icon(Icons.new_releases, color: Colors.orange),
                 title: Text(track.title),
                 subtitle: track.dateAdded != null
-                    ? Text('Added: ${_formatDate(track.dateAdded!)}')
+                    ? Text('Dodano: ${_formatDate(track.dateAdded!)}')
                     : null,
               );
             },
@@ -60,7 +61,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
               ref.read(manifestNotifierProvider.notifier).clearNewTracks();
               Navigator.of(context).pop();
             },
-            child: const Text('Got it'),
+            child: const Text('OK'),
           ),
         ],
       ),
@@ -77,201 +78,250 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
     final audioState = ref.watch(audioPlayerNotifierProvider);
 
     return Scaffold(
-      body: tracksAsync.when(
-        data: (tracks) {
-          if (tracks.isEmpty) {
-            return const Center(
-              child: Text('Brak dostępnych nagrań'),
-            );
-          }
+      body: SafeArea(
+        child: tracksAsync.when(
+          data: (tracks) {
+            if (tracks.isEmpty) {
+              return const Center(
+                child: Text('Brak dostępnych nagrań'),
+              );
+            }
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  itemCount: tracks.length + 1, // +1 for the header
-                  itemBuilder: (context, index) {
-                    // First item is the header
-                    if (index == 0) {
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 24.0),
-                        child: Row(
-                          children: [
-                            Image.network(
-                              'https://theos-logos.pl/logoTXT.png',
-                              height: 40,
-                              errorBuilder: (context, error, stackTrace) {
-                                return const Icon(Icons.error, color: Colors.red);
-                              },
-                            ),
-                            const SizedBox(width: 12),
-                            const Text(
-                              'Theos Logos',
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w300,
-                                color: Colors.white,
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: ListView.builder(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    itemCount: tracks.length + 1, // +1 for the header
+                    itemBuilder: (context, index) {
+                      // First item is the header
+                      if (index == 0) {
+                        return Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 24.0),
+                          child: Row(
+                            children: [
+                              Image.network(
+                                'https://theos-logos.pl/logoTXT.png',
+                                height: 40,
+                                errorBuilder: (context, error, stackTrace) {
+                                  return const SizedBox(height: 40, width: 40);
+                                },
                               ),
-                            ),
-                            const Spacer(),
-                            IconButton(
-                              icon: const Icon(Icons.refresh, color: Colors.white70),
-                              tooltip: 'Wyczyść odsłuchane',
-                              onPressed: () {
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => AlertDialog(
-                                    title: const Text('Wyczyść odsłuchane'),
-                                    content: const Text('Czy na pewno chcesz wyczyścić status wszystkich odsłuchanych nagrań?'),
-                                    actions: [
-                                      TextButton(
-                                        onPressed: () => Navigator.of(context).pop(),
-                                        child: const Text('Anuluj'),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Theos - Logos',
+                                style: TextStyle(
+                                  fontSize: 20,
+                                  fontWeight: FontWeight.w300,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.refresh,
+                                    color: Colors.white70),
+                                tooltip: 'Wyczyść odsłuchane',
+                                onPressed: () {
+                                  showDialog(
+                                    context: context,
+                                    builder: (context) => AlertDialog(
+                                      title: const Text('Wyczyść odsłuchane'),
+                                      content: const Text(
+                                          'Czy na pewno chcesz wyczyścić status wszystkich odsłuchanych nagrań?'),
+                                      actions: [
+                                        TextButton(
+                                          onPressed: () =>
+                                              Navigator.of(context).pop(),
+                                          child: const Text('Anuluj'),
+                                        ),
+                                        TextButton(
+                                          onPressed: () {
+                                            ref
+                                                .read(manifestNotifierProvider
+                                                    .notifier)
+                                                .clearAllListened();
+                                            Navigator.of(context).pop();
+                                            ScaffoldMessenger.of(context)
+                                                .showSnackBar(
+                                              const SnackBar(
+                                                content: Text(
+                                                    'Wyczyszczono status odsłuchanych nagrań'),
+                                                duration: Duration(seconds: 2),
+                                              ),
+                                            );
+                                          },
+                                          child: const Text('Wyczyść'),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.volunteer_activism,
+                                    color: Color(0xFFFFB300)),
+                                tooltip: 'Wspomóż',
+                                onPressed: () {
+                                  context.push('/support');
+                                },
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      final trackIndex = index - 1;
+                      final track = tracks[trackIndex];
+                      final isPlaying = audioState.currentIndex == trackIndex;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFF2a2a2a),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Semantics(
+                          label:
+                              'Odtwórz ${track.title}${track.isListened ? ', odsłuchane' : ''}',
+                          button: true,
+                          child: InkWell(
+                            onTap: () {
+                              ref
+                                  .read(audioPlayerNotifierProvider.notifier)
+                                  .playTrack(track, trackIndex,
+                                      startPosition: Duration.zero);
+                            },
+                            borderRadius: BorderRadius.circular(8),
+                            splashColor:
+                                const Color(0xFFFFB300).withValues(alpha: 0.2),
+                            highlightColor:
+                                const Color(0xFFFFB300).withValues(alpha: 0.1),
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 24,
+                                  child: track.isListened
+                                      ? const Icon(
+                                          Icons.check_circle,
+                                          size: 16,
+                                          color: Colors.green,
+                                        )
+                                      : Text(
+                                          '${trackIndex + 1}',
+                                          style: TextStyle(
+                                            color: isPlaying
+                                                ? const Color(0xFFFFB300)
+                                                : const Color(0xFFB0B0B0),
+                                            fontSize: 14,
+                                            fontWeight: isPlaying
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
+                                ),
+                                const SizedBox(width: 12),
+                                Icon(
+                                  isPlaying && audioState.isPlaying
+                                      ? Icons.pause_circle
+                                      : Icons.play_circle,
+                                  color: isPlaying
+                                      ? const Color(0xFFFFB300)
+                                      : Colors.grey[700],
+                                  size: 28,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        track.title,
+                                        style: TextStyle(
+                                          color: Colors.grey[300],
+                                          fontSize: 14,
+                                          fontWeight: isPlaying
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
                                       ),
-                                      TextButton(
-                                        onPressed: () {
-                                          ref.read(manifestNotifierProvider.notifier).clearAllListened();
-                                          Navigator.of(context).pop();
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            const SnackBar(
-                                              content: Text('Wyczyszczono status odsłuchanych nagrań'),
-                                              duration: Duration(seconds: 2),
+                                      if (track.isDownloaded) ...[
+                                        const SizedBox(height: 4),
+                                        Row(
+                                          children: [
+                                            const Icon(
+                                              Icons.download_done,
+                                              size: 14,
+                                              color: Colors.green,
                                             ),
-                                          );
-                                        },
-                                        child: const Text('Wyczyść'),
-                                      ),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              'Pobrane',
+                                              style: TextStyle(
+                                                color: Colors.grey[500],
+                                                fontSize: 12,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ],
                                   ),
-                                );
-                              },
+                                ),
+                                if (!track.isDownloaded)
+                                  Semantics(
+                                    label: 'Pobierz nagranie ${track.title}',
+                                    button: true,
+                                    child: IconButton(
+                                      icon: const Icon(Icons.download,
+                                          color: Colors.white, size: 24),
+                                      onPressed: () {
+                                        ref
+                                            .read(manifestNotifierProvider
+                                                .notifier)
+                                            .downloadTrack(track.id);
+                                      },
+                                      padding: const EdgeInsets.all(12),
+                                      constraints: const BoxConstraints(
+                                          minWidth: 48, minHeight: 48),
+                                      tooltip: 'Pobierz',
+                                    ),
+                                  ),
+                              ],
                             ),
-                            IconButton(
-                              icon: const Icon(Icons.favorite, color: Color(0xFFFFB300)),
-                              tooltip: 'Wspomóż',
-                              onPressed: () {
-                                context.push('/support');
-                              },
-                            ),
-                          ],
+                          ),
                         ),
                       );
-                    }
-
-                    final trackIndex = index - 1;
-                    final track = tracks[trackIndex];
-                    final isPlaying = audioState.currentIndex == trackIndex;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2a2a2a),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: InkWell(
-                        onTap: () {
-                          ref
-                              .read(audioPlayerNotifierProvider.notifier)
-                              .playTrack(track, trackIndex, startPosition: Duration.zero);
-                        },
-                        child: Row(
-                          children: [
-                            SizedBox(
-                              width: 24,
-                              child: track.isListened
-                                  ? const Icon(
-                                      Icons.check_circle,
-                                      size: 16,
-                                      color: Colors.green,
-                                    )
-                                  : Text(
-                                      '${trackIndex + 1}',
-                                      style: TextStyle(
-                                        color: isPlaying ? const Color(0xFFFFB300) : Colors.grey,
-                                        fontSize: 14,
-                                        fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
-                                      ),
-                                    ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    track.title,
-                                    style: TextStyle(
-                                      color: Colors.grey[400],
-                                      fontSize: 14,
-                                      fontWeight: isPlaying ? FontWeight.bold : FontWeight.normal,
-                                    ),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        track.isDownloaded ? Icons.download_done : Icons.cloud_download,
-                                        size: 14,
-                                        color: track.isDownloaded ? Colors.green : Colors.grey,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        track.isDownloaded ? 'Pobrane' : 'Strumieniowanie',
-                                        style: TextStyle(
-                                          color: Colors.grey[600],
-                                          fontSize: 12,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (!track.isDownloaded)
-                              IconButton(
-                                icon: const Icon(Icons.download, color: Colors.white, size: 20),
-                                onPressed: () {
-                                  ref
-                                      .read(manifestNotifierProvider.notifier)
-                                      .downloadTrack(track.id);
-                                },
-                                padding: EdgeInsets.zero,
-                                constraints: const BoxConstraints(),
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                    },
+                  ),
                 ),
-              ),
-              const AudioPlayerWidget(),
-            ],
-          );
-        },
-        loading: () => const Center(
-          child: CircularProgressIndicator(),
-        ),
-        error: (error, stack) => Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
-              const SizedBox(height: 16),
-              Text('Error: $error'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: () {
-                  ref.read(manifestNotifierProvider.notifier).syncManifest();
-                },
-                child: const Text('Retry'),
-              ),
-            ],
+                const AudioPlayerWidget(),
+              ],
+            );
+          },
+          loading: () => const Center(
+            child: CircularProgressIndicator(),
+          ),
+          error: (error, stack) => Center(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                const SizedBox(height: 16),
+                Text('Error: $error'),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () {
+                    ref.read(manifestNotifierProvider.notifier).syncManifest();
+                  },
+                  child: const Text('Spróbuj ponownie'),
+                ),
+              ],
+            ),
           ),
         ),
       ),

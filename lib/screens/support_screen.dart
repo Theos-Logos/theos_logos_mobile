@@ -57,6 +57,15 @@ class SupportScreen extends StatelessWidget {
                 color: Colors.white,
               ),
             ),
+            const SizedBox(height: 16),
+            const Text(
+              'Projekt Theos-Logos jest całkowicie non-profit i utrzymywany wyłącznie dzięki darczyńcom. Każde wsparcie pomoże nam kontynuować tworzenie i udostępnianie treści.',
+              style: TextStyle(
+                fontSize: 14,
+                color: Colors.white60,
+                height: 1.5,
+              ),
+            ),
             const SizedBox(height: 24),
             const Text(
               'Chcesz wesprzeć powstanie Theos-Logos?',

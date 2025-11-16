@@ -6,7 +6,14 @@ class AudioPlayerWidget extends ConsumerWidget {
   const AudioPlayerWidget({super.key});
 
   String _formatDuration(Duration duration) {
-    return '${duration.inSeconds}s';
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+    final seconds = duration.inSeconds % 60;
+
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
   }
 
   @override
@@ -39,7 +46,7 @@ class AudioPlayerWidget extends ConsumerWidget {
                   const SizedBox(height: 8),
                   const Text(
                     'Nie wybrano nagrania',
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                    style: TextStyle(color: Color(0xFFB0B0B0), fontSize: 12),
                   ),
                 ],
               ),
@@ -73,14 +80,14 @@ class AudioPlayerWidget extends ConsumerWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Progress bar
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    return GestureDetector(
-                      onTapDown: (details) {
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: LayoutBuilder(
+                    builder: (context, constraints) {
+                      void handleSeek(double localX) {
                         if (audioState.duration.inSeconds > 0) {
-                          final localPosition = details.localPosition.dx.clamp(0.0, constraints.maxWidth);
-                          final width = constraints.maxWidth;
-                          final percentage = (localPosition / width).clamp(0.0, 1.0);
+                          final clampedX = localX.clamp(0.0, constraints.maxWidth);
+                          final percentage = (clampedX / constraints.maxWidth).clamp(0.0, 1.0);
                           var newPosition = audioState.duration * percentage;
 
                           // Ensure we don't seek beyond the duration (leave 1 second buffer)
@@ -90,60 +97,121 @@ class AudioPlayerWidget extends ConsumerWidget {
 
                           ref.read(audioPlayerNotifierProvider.notifier).seek(newPosition);
                         }
-                      },
-                      child: Stack(
-                        children: [
-                          Container(
-                            height: 4,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[800],
-                              borderRadius: BorderRadius.circular(2),
-                            ),
-                          ),
-                          FractionallySizedBox(
-                            widthFactor: audioState.duration.inSeconds > 0
-                                ? (audioState.position.inSeconds / audioState.duration.inSeconds).clamp(0.0, 1.0)
-                                : 0.0,
-                            child: Container(
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFFFB300),
-                                borderRadius: BorderRadius.circular(2),
+                      }
+
+                      return Semantics(
+                        label: 'Pasek postępu odtwarzania',
+                        value: '${audioState.duration.inSeconds > 0 ? (audioState.position.inSeconds / audioState.duration.inSeconds * 100).round() : 0}%',
+                        slider: true,
+                        child: GestureDetector(
+                          onTapDown: (details) {
+                            handleSeek(details.localPosition.dx);
+                          },
+                          onHorizontalDragStart: (details) {
+                            handleSeek(details.localPosition.dx);
+                          },
+                          onHorizontalDragUpdate: (details) {
+                            handleSeek(details.localPosition.dx);
+                          },
+                          child: SizedBox(
+                          height: 48,
+                          child: Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.centerLeft,
+                            children: [
+                              Positioned.fill(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Container(
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey[800],
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                ),
                               ),
-                            ),
+                              Positioned.fill(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: FractionallySizedBox(
+                                    alignment: Alignment.centerLeft,
+                                    widthFactor: audioState.duration.inSeconds > 0
+                                        ? (audioState.position.inSeconds / audioState.duration.inSeconds).clamp(0.0, 1.0)
+                                        : 0.0,
+                                    child: Container(
+                                      height: 4,
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFB300),
+                                        borderRadius: BorderRadius.circular(2),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              Positioned(
+                                left: audioState.duration.inSeconds > 0
+                                    ? (constraints.maxWidth * (audioState.position.inSeconds / audioState.duration.inSeconds).clamp(0.0, 1.0) - 10)
+                                    : -10,
+                                child: Container(
+                                  width: 20,
+                                  height: 20,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFFFB300),
+                                    shape: BoxShape.circle,
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(alpha: 0.3),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
-                    );
-                  },
+                      );
+                    },
+                  ),
                 ),
                 const SizedBox(height: 8),
                 Text(
                   '${_formatDuration(audioState.position)} / ${_formatDuration(audioState.duration)}',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  style: const TextStyle(color: Color(0xFFB0B0B0), fontSize: 12),
                 ),
               ],
             ),
           ),
           const SizedBox(width: 16),
-          IconButton(
-            icon: Icon(
-              audioState.isPlaying ? Icons.pause : Icons.play_arrow,
-              color: Colors.white,
+          Semantics(
+            label: audioState.isPlaying ? 'Pauza' : 'Odtwórz',
+            button: true,
+            child: IconButton(
+              icon: Icon(
+                audioState.isPlaying ? Icons.pause : Icons.play_arrow,
+                color: Colors.white,
+              ),
+              onPressed: () {
+                if (audioState.isPlaying) {
+                  ref.read(audioPlayerNotifierProvider.notifier).pause();
+                } else {
+                  ref.read(audioPlayerNotifierProvider.notifier).resume();
+                }
+              },
             ),
-            onPressed: () {
-              if (audioState.isPlaying) {
-                ref.read(audioPlayerNotifierProvider.notifier).pause();
-              } else {
-                ref.read(audioPlayerNotifierProvider.notifier).resume();
-              }
-            },
           ),
-          IconButton(
-            icon: const Icon(Icons.refresh, color: Colors.white),
-            onPressed: () {
-              ref.read(audioPlayerNotifierProvider.notifier).seek(Duration.zero);
-            },
+          Semantics(
+            label: 'Przewiń do początku',
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.refresh, color: Colors.white),
+              onPressed: () {
+                ref.read(audioPlayerNotifierProvider.notifier).seek(Duration.zero);
+              },
+            ),
           ),
         ],
       ),
