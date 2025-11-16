@@ -69,6 +69,7 @@ class ManifestNotifier extends AsyncNotifier<List<AudioTrack>> {
         final track = AudioTrack(
           id: file['id'] as String,
           title: file['title'] as String,
+          book: file['book'] as String?,
           fileName: file['file_name'] as String,
           url: file['url'] as String,
           order: i,

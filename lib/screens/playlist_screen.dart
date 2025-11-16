@@ -4,7 +4,9 @@ import 'package:go_router/go_router.dart';
 import '../models/audio_track.dart';
 import '../providers/manifest_provider.dart';
 import '../providers/audio_provider.dart';
+import '../providers/book_filter_provider.dart';
 import '../widgets/audio_player_widget.dart';
+import '../widgets/book_filter_drawer.dart';
 
 class PlaylistScreen extends ConsumerStatefulWidget {
   const PlaylistScreen({super.key});
@@ -75,15 +77,30 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
   @override
   Widget build(BuildContext context) {
     final tracksAsync = ref.watch(manifestNotifierProvider);
+    final filteredTracks = ref.watch(filteredTracksProvider);
+    final selectedBook = ref.watch(bookFilterProvider);
     final audioState = ref.watch(audioPlayerNotifierProvider);
 
     return Scaffold(
+      drawer: const BookFilterDrawer(),
       body: SafeArea(
         child: tracksAsync.when(
           data: (tracks) {
-            if (tracks.isEmpty) {
-              return const Center(
-                child: Text('Brak dostępnych nagrań'),
+            if (filteredTracks.isEmpty) {
+              return Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.info_outline, size: 48, color: Colors.grey),
+                    const SizedBox(height: 16),
+                    Text(
+                      selectedBook != null
+                          ? 'Brak nagrań w wybranej księdze'
+                          : 'Brak dostępnych nagrań',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
+                  ],
+                ),
               );
             }
 
@@ -93,7 +110,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                 Expanded(
                   child: ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: tracks.length + 1, // +1 for the header
+                    itemCount: filteredTracks.length + 2, // +2 for header and book title
                     itemBuilder: (context, index) {
                       // First item is the header
                       if (index == 0) {
@@ -101,6 +118,20 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                           padding: const EdgeInsets.symmetric(vertical: 24.0),
                           child: Row(
                             children: [
+                              Builder(
+                                builder: (context) => IconButton(
+                                  icon: const Icon(
+                                    Icons.menu,
+                                    color: Color(0xFFFFB300),
+                                    size: 28,
+                                  ),
+                                  tooltip: 'Menu',
+                                  onPressed: () {
+                                    Scaffold.of(context).openDrawer();
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 8),
                               Image.network(
                                 'https://theos-logos.pl/logoTXT.png',
                                 height: 40,
@@ -171,9 +202,44 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                         );
                       }
 
-                      final trackIndex = index - 1;
-                      final track = tracks[trackIndex];
-                      final isPlaying = audioState.currentIndex == trackIndex;
+                      // Second item is the book title (if filtered)
+                      if (index == 1 && selectedBook != null) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.book,
+                                color: Color(0xFFFFB300),
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Text(
+                                  selectedBook,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
+
+                      // Skip the book title row if no filter is selected
+                      final trackIndex = selectedBook != null ? index - 2 : index - 1;
+
+                      if (trackIndex < 0 || trackIndex >= filteredTracks.length) {
+                        return const SizedBox.shrink();
+                      }
+
+                      final track = filteredTracks[trackIndex];
+                      // Find the original index in the full tracks list for playback
+                      final originalIndex = tracks.indexWhere((t) => t.id == track.id);
+                      final isPlaying = audioState.currentIndex == originalIndex;
 
                       return Container(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -190,7 +256,7 @@ class _PlaylistScreenState extends ConsumerState<PlaylistScreen> {
                             onTap: () {
                               ref
                                   .read(audioPlayerNotifierProvider.notifier)
-                                  .playTrack(track, trackIndex,
+                                  .playTrack(track, originalIndex,
                                       startPosition: Duration.zero);
                             },
                             borderRadius: BorderRadius.circular(8),

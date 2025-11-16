@@ -1,6 +1,7 @@
 class AudioTrack {
   final String id;
   final String title;
+  final String? book;
   final String fileName;
   final String url;
   final int order;
@@ -12,6 +13,7 @@ class AudioTrack {
   AudioTrack({
     required this.id,
     required this.title,
+    this.book,
     required this.fileName,
     required this.url,
     required this.order,
@@ -25,6 +27,7 @@ class AudioTrack {
     return AudioTrack(
       id: json['id'] as String,
       title: json['title'] as String,
+      book: json['book'] as String?,
       fileName: json['file_name'] as String,
       url: json['url'] as String,
       order: json['order'] as int,
@@ -41,6 +44,7 @@ class AudioTrack {
     return {
       'id': id,
       'title': title,
+      'book': book,
       'file_name': fileName,
       'url': url,
       'order': order,
@@ -54,6 +58,7 @@ class AudioTrack {
   AudioTrack copyWith({
     String? id,
     String? title,
+    String? book,
     String? fileName,
     String? url,
     int? order,
@@ -65,6 +70,7 @@ class AudioTrack {
     return AudioTrack(
       id: id ?? this.id,
       title: title ?? this.title,
+      book: book ?? this.book,
       fileName: fileName ?? this.fileName,
       url: url ?? this.url,
       order: order ?? this.order,
