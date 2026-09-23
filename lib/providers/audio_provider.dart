@@ -2,6 +2,7 @@ import 'package:just_audio/just_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/audio_track.dart';
+import 'book_filter_provider.dart';
 import 'manifest_provider.dart';
 
 class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
@@ -65,22 +66,16 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
             _lastCompletedTrackId != _currentTrack!.id &&
             state.duration.inSeconds > 0) {
 
-          // Check that the track has been playing for at least 3 seconds
-          // This prevents false completions on track start
+          // Ignore the spurious completed event just_audio emits when a
+          // source is loaded. A real ending has been playing for a while.
           if (_trackStartTime != null) {
             final playDuration = DateTime.now().difference(_trackStartTime!);
             if (playDuration.inSeconds < 3) {
-              return; // Track just started, ignore completion
+              return;
             }
           }
 
-          final position = state.position.inSeconds;
-          final duration = state.duration.inSeconds;
-          // Check if we're within 3 seconds of the end AND position is not 0
-          // (natural completion means we're near the end, not at the beginning)
-          if (position > 0 && duration - position < 3) {
-            _onTrackCompleted();
-          }
+          _onTrackCompleted();
         }
       }
     });
@@ -227,23 +222,40 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
     if (_lastCompletedTrackId == completedTrackId) return;
     _lastCompletedTrackId = completedTrackId;
 
-    // Get all tracks to find the next one
     final tracks = ref.read(manifestNotifierProvider).value;
     if (tracks == null || tracks.isEmpty) return;
 
-    // Mark the completed track as listened (do this AFTER getting next track but BEFORE playing)
-    await ref.read(manifestNotifierProvider.notifier).markAsListened(completedTrackId);
+    // Snapshot the list on screen before markAsListened rebuilds state.
+    // A book filter must advance inside that book, not into the next one.
+    final queue = List<AudioTrack>.from(ref.read(filteredTracksProvider));
 
-    // Play next track if available
-    final nextIndex = _currentIndex! + 1;
-    if (nextIndex < tracks.length) {
-      final nextTrack = tracks[nextIndex];
-      // playTrack will set _isTransitioning = true
-      await playTrack(nextTrack, nextIndex, startPosition: Duration.zero);
+    await ref
+        .read(manifestNotifierProvider.notifier)
+        .markAsListened(completedTrackId);
+
+    final queueIndex = queue.indexWhere((t) => t.id == completedTrackId);
+    final AudioTrack? nextTrack;
+    if (queueIndex >= 0 && queueIndex + 1 < queue.length) {
+      nextTrack = queue[queueIndex + 1];
+    } else if (queueIndex < 0 && _currentIndex! + 1 < tracks.length) {
+      // Filter changed mid-playback and this track is no longer visible.
+      nextTrack = tracks[_currentIndex! + 1];
     } else {
-      // No more tracks, stop playing
-      state = state.copyWith(isPlaying: false);
+      nextTrack = null;
     }
+
+    if (nextTrack == null) {
+      state = state.copyWith(isPlaying: false);
+      return;
+    }
+
+    final nextIndex = tracks.indexWhere((t) => t.id == nextTrack!.id);
+    if (nextIndex < 0) {
+      state = state.copyWith(isPlaying: false);
+      return;
+    }
+
+    await playTrack(nextTrack, nextIndex, startPosition: Duration.zero);
   }
 
   Future<Map<String, dynamic>?> getLastPlayedInfo() async {
