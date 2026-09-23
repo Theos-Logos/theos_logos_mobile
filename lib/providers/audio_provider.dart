@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:just_audio/just_audio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -137,21 +139,17 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
         }
       }
 
-      await _player!.play();
-
-      // Mark when the track started playing
+      // play() resolves only when playback ends, pauses, or stops. Awaiting it
+      // kept _isTransitioning true for the whole track, so the real completion
+      // event was ignored and the next recording never started.
       _trackStartTime = DateTime.now();
-
-      // Reset completion tracking AFTER the track has started playing
-      // This prevents completion events during track transition from affecting the new track
       _lastCompletedTrackId = null;
-
-      // End transition state after a short delay to ensure everything is settled
-      Future.delayed(const Duration(milliseconds: 500), () {
-        _isTransitioning = false;
-      });
-
-      // The isPlaying state will be updated by the stream listener
+      _isTransitioning = false;
+      unawaited(_player!.play().then<void>((_) {}, onError: (Object e, StackTrace _) {
+        print('Error playing track: $e');
+        state = state.copyWith(isPlaying: false);
+      }));
+      // isPlaying is updated by playingStream.
     } catch (e) {
       print('Error playing track: $e');
       // Reset transition state on error
