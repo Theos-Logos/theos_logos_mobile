@@ -182,6 +182,13 @@ class AudioPlayerWidget extends ConsumerWidget {
                   '${_formatDuration(audioState.position)} / ${_formatDuration(audioState.duration)}',
                   style: const TextStyle(color: Color(0xFFB0B0B0), fontSize: 12),
                 ),
+                if (audioState.error != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    audioState.error!,
+                    style: const TextStyle(color: Color(0xFFFF8A80), fontSize: 12),
+                  ),
+                ],
               ],
             ),
           ),

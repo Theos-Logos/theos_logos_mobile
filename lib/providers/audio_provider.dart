@@ -1,7 +1,8 @@
 import 'dart:async';
 
-import 'package:just_audio/just_audio.dart';
+import 'package:audio_session/audio_session.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:just_audio/just_audio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/audio_track.dart';
 import 'book_filter_provider.dart';
@@ -11,42 +12,46 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
   AudioPlayer? _player;
   AudioTrack? _currentTrack;
   int? _currentIndex;
-  String? _lastCompletedTrackId;
-  bool _isTransitioning = false;
+  List<AudioTrack> _queue = [];
+  bool _sessionReady = false;
+  bool _loadingSource = false;
+  bool _ignoreNextIndex = false;
+  String? _lastListenedId;
   DateTime? _trackStartTime;
 
   @override
   AudioPlayerState build() {
-    // Initialize player
-    _player = AudioPlayer();
+    // Pixel 10 reports that it can offload MP3 and then plays silence.
+    _player = AudioPlayer(
+      androidAudioOffloadPreferences: const AndroidAudioOffloadPreferences(
+        audioOffloadMode: AndroidAudioOffloadMode.disabled,
+      ),
+    );
 
-    // Set up stream listeners once
     _setupStreamListeners();
 
-    // Dispose the audio player when the provider is disposed
     ref.onDispose(() {
       _player?.dispose();
     });
 
-    _loadLastPlayedPosition();
     return AudioPlayerState(
       isPlaying: false,
       currentTrack: null,
       position: Duration.zero,
       duration: Duration.zero,
       currentIndex: null,
+      error: null,
     );
   }
 
   void _setupStreamListeners() {
-    // Listen to player state
     _player!.playingStream.listen((playing) {
       state = state.copyWith(isPlaying: playing);
     });
 
     _player!.positionStream.listen((position) {
       state = state.copyWith(position: position);
-      if (_currentTrack != null) {
+      if (_currentTrack != null && !_loadingSource) {
         _savePosition(_currentTrack!.id, position);
       }
     });
@@ -57,106 +62,129 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
       }
     });
 
-    // Listen to player completion
+    _player!.errorStream.listen((error) {
+      state = state.copyWith(error: 'Nie udało się odtworzyć nagrania.');
+      print('Audio error: $error');
+    });
+
+    // The player advances the playlist itself. This only updates the row
+    // that is highlighted and marks the previous recording as heard.
+    _player!.currentIndexStream.listen((index) {
+      if (index == null || index < 0 || index >= _queue.length) return;
+      final track = _queue[index];
+      final previousId = _currentTrack?.id;
+      final userChoseThis = _ignoreNextIndex;
+      _ignoreNextIndex = false;
+      _showTrack(track);
+      if (!userChoseThis &&
+          previousId != null &&
+          previousId != track.id &&
+          _lastListenedId != previousId) {
+        _lastListenedId = previousId;
+        ref.read(manifestNotifierProvider.notifier).markAsListened(previousId);
+      }
+    });
+
     _player!.playerStateStream.listen((playerState) {
-      if (playerState.processingState == ProcessingState.completed) {
-        // Ignore completion events during track transitions
-        if (_isTransitioning) return;
-
-        // Only handle completion if we have a track and haven't already handled it
-        if (_currentTrack != null &&
-            _lastCompletedTrackId != _currentTrack!.id &&
-            state.duration.inSeconds > 0) {
-
-          // Ignore the spurious completed event just_audio emits when a
-          // source is loaded. A real ending has been playing for a while.
-          if (_trackStartTime != null) {
-            final playDuration = DateTime.now().difference(_trackStartTime!);
-            if (playDuration.inSeconds < 3) {
-              return;
-            }
-          }
-
-          _onTrackCompleted();
-        }
+      if (playerState.processingState != ProcessingState.completed) return;
+      if (_loadingSource) return;
+      final started = _trackStartTime;
+      if (started != null &&
+          DateTime.now().difference(started) < const Duration(seconds: 3)) {
+        return;
+      }
+      final id = _currentTrack?.id;
+      if (id != null && _lastListenedId != id) {
+        _lastListenedId = id;
+        ref.read(manifestNotifierProvider.notifier).markAsListened(id);
+      }
+      // End of the queue. playing stays true in just_audio, which looks like
+      // a stuck pause button and yields no sound.
+      if (_player!.playing) {
+        _player!.pause();
       }
     });
   }
 
-  Future<void> _loadLastPlayedPosition() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final lastTrackId = prefs.getString('last_track_id');
-      final lastPosition = prefs.getInt('last_position') ?? 0;
+  Future<void> _ensureSession() async {
+    if (_sessionReady) return;
+    final session = await AudioSession.instance;
+    await session.configure(const AudioSessionConfiguration.music());
+    _sessionReady = true;
+  }
 
-      if (lastTrackId != null) {
-        // We'll restore this when the track is loaded
-        print(
-            'Last played: $lastTrackId at ${Duration(milliseconds: lastPosition)}');
-      }
-    } catch (e) {
-      print('Error loading last played position: $e');
+  AudioSource _sourceFor(AudioTrack track) {
+    if (track.isDownloaded && track.localPath != null) {
+      return AudioSource.file(track.localPath!, tag: track.id);
     }
+    return AudioSource.uri(Uri.parse(track.url), tag: track.id);
+  }
+
+  void _showTrack(AudioTrack track) {
+    final full = ref.read(manifestNotifierProvider).value ?? const <AudioTrack>[];
+    final fullIndex = full.indexWhere((item) => item.id == track.id);
+    _currentTrack = track;
+    _currentIndex = fullIndex >= 0 ? fullIndex : _currentIndex;
+    state = state.copyWith(
+      currentTrack: track,
+      currentIndex: _currentIndex,
+      position: Duration.zero,
+      clearError: true,
+    );
   }
 
   Future<void> playTrack(AudioTrack track, int index,
       {Duration? startPosition}) async {
     try {
-      // Mark that we're transitioning to prevent completion events
-      _isTransitioning = true;
+      await _ensureSession();
+      _loadingSource = true;
 
+      var queue = List<AudioTrack>.from(ref.read(filteredTracksProvider));
+      if (!queue.any((item) => item.id == track.id)) {
+        final full = ref.read(manifestNotifierProvider).value;
+        queue = List<AudioTrack>.from(full ?? const <AudioTrack>[]);
+      }
+      var queueIndex = queue.indexWhere((item) => item.id == track.id);
+      if (queueIndex < 0) {
+        queue = [track];
+        queueIndex = 0;
+      }
+      // From the tapped recording through the end of the list on screen.
+      _queue = queue.sublist(queueIndex);
+      _ignoreNextIndex = true;
       _currentTrack = track;
       _currentIndex = index;
-
-      // Stop and reset player if needed
-      if (_player!.playing) {
-        await _player!.stop();
-      }
-
-      // Update state immediately to show the track in UI
+      _trackStartTime = DateTime.now();
       state = state.copyWith(
         currentTrack: track,
         currentIndex: index,
-        position: Duration.zero,
+        position: startPosition ?? Duration.zero,
         duration: Duration.zero,
+        clearError: true,
       );
 
-      // Use local path if downloaded, otherwise stream from URL
-      final audioSource = track.isDownloaded && track.localPath != null
-          ? AudioSource.file(track.localPath!)
-          : AudioSource.uri(Uri.parse(track.url));
-
-      await _player!.setAudioSource(audioSource);
-
-      // Restore position if provided or load saved position
-      if (startPosition != null) {
-        await _player!.seek(startPosition);
-      } else {
-        final prefs = await SharedPreferences.getInstance();
-        final savedPosition = prefs.getInt('last_position_${track.id}');
-        if (savedPosition != null && savedPosition > 0) {
-          await _player!.seek(Duration(milliseconds: savedPosition));
-        }
+      if (_player!.playing) {
+        await _player!.pause();
       }
 
-      // play() resolves only when playback ends, pauses, or stops. Awaiting it
-      // kept _isTransitioning true for the whole track, so the real completion
-      // event was ignored and the next recording never started.
-      _trackStartTime = DateTime.now();
-      _lastCompletedTrackId = null;
-      _isTransitioning = false;
-      unawaited(_player!.play().then<void>((_) {}, onError: (Object e, StackTrace _) {
-        print('Error playing track: $e');
-        state = state.copyWith(isPlaying: false);
+      await _player!.setAudioSources(
+        _queue.map(_sourceFor).toList(),
+        initialIndex: 0,
+        initialPosition: startPosition ?? Duration.zero,
+      );
+
+      _loadingSource = false;
+      unawaited(_player!.play().then<void>((_) {}, onError: (Object error, StackTrace _) {
+        state = state.copyWith(error: 'Nie udało się odtworzyć nagrania.');
+        print('Error playing track: $error');
       }));
-      // isPlaying is updated by playingStream.
-    } catch (e) {
-      print('Error playing track: $e');
-      // Reset transition state on error
-      _isTransitioning = false;
-      // Reset state on error
+    } catch (error) {
+      _loadingSource = false;
+      _ignoreNextIndex = false;
+      print('Error playing track: $error');
       state = state.copyWith(
         isPlaying: false,
+        error: 'Nie udało się odtworzyć nagrania.',
       );
     }
   }
@@ -169,16 +197,19 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
   }
 
   Future<void> resume() async {
-    await _player!.play();
+    if (_player!.processingState == ProcessingState.completed) {
+      await _player!.seek(Duration.zero);
+    }
+    unawaited(_player!.play());
   }
 
   Future<void> seek(Duration position) async {
-    // Clamp position to valid range (0 to duration - 1 second)
     var clampedPosition = position;
     if (state.duration.inSeconds > 0) {
       final maxPosition = state.duration - const Duration(seconds: 1);
       clampedPosition = Duration(
-        milliseconds: position.inMilliseconds.clamp(0, maxPosition.inMilliseconds),
+        milliseconds:
+            position.inMilliseconds.clamp(0, maxPosition.inMilliseconds),
       );
     }
 
@@ -207,55 +238,6 @@ class AudioPlayerNotifier extends Notifier<AudioPlayerState> {
     }
   }
 
-  Future<void> _onTrackCompleted() async {
-    if (_currentTrack == null || _currentIndex == null) return;
-
-    // Already transitioning? Don't trigger completion again
-    if (_isTransitioning) return;
-
-    // Store the track ID that just completed BEFORE doing anything else
-    final completedTrackId = _currentTrack!.id;
-
-    // Prevent marking the same track multiple times
-    if (_lastCompletedTrackId == completedTrackId) return;
-    _lastCompletedTrackId = completedTrackId;
-
-    final tracks = ref.read(manifestNotifierProvider).value;
-    if (tracks == null || tracks.isEmpty) return;
-
-    // Snapshot the list on screen before markAsListened rebuilds state.
-    // A book filter must advance inside that book, not into the next one.
-    final queue = List<AudioTrack>.from(ref.read(filteredTracksProvider));
-
-    await ref
-        .read(manifestNotifierProvider.notifier)
-        .markAsListened(completedTrackId);
-
-    final queueIndex = queue.indexWhere((t) => t.id == completedTrackId);
-    final AudioTrack? nextTrack;
-    if (queueIndex >= 0 && queueIndex + 1 < queue.length) {
-      nextTrack = queue[queueIndex + 1];
-    } else if (queueIndex < 0 && _currentIndex! + 1 < tracks.length) {
-      // Filter changed mid-playback and this track is no longer visible.
-      nextTrack = tracks[_currentIndex! + 1];
-    } else {
-      nextTrack = null;
-    }
-
-    if (nextTrack == null) {
-      state = state.copyWith(isPlaying: false);
-      return;
-    }
-
-    final nextIndex = tracks.indexWhere((t) => t.id == nextTrack!.id);
-    if (nextIndex < 0) {
-      state = state.copyWith(isPlaying: false);
-      return;
-    }
-
-    await playTrack(nextTrack, nextIndex, startPosition: Duration.zero);
-  }
-
   Future<Map<String, dynamic>?> getLastPlayedInfo() async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -281,6 +263,7 @@ class AudioPlayerState {
   final Duration position;
   final Duration duration;
   final int? currentIndex;
+  final String? error;
 
   AudioPlayerState({
     required this.isPlaying,
@@ -288,6 +271,7 @@ class AudioPlayerState {
     required this.position,
     required this.duration,
     required this.currentIndex,
+    required this.error,
   });
 
   AudioPlayerState copyWith({
@@ -296,6 +280,8 @@ class AudioPlayerState {
     Duration? position,
     Duration? duration,
     int? currentIndex,
+    String? error,
+    bool clearError = false,
   }) {
     return AudioPlayerState(
       isPlaying: isPlaying ?? this.isPlaying,
@@ -303,11 +289,11 @@ class AudioPlayerState {
       position: position ?? this.position,
       duration: duration ?? this.duration,
       currentIndex: currentIndex ?? this.currentIndex,
+      error: clearError ? null : (error ?? this.error),
     );
   }
 }
 
-// Provider declaration
 final audioPlayerNotifierProvider =
     NotifierProvider<AudioPlayerNotifier, AudioPlayerState>(() {
   return AudioPlayerNotifier();

@@ -1,7 +1,7 @@
 name: theos_logos_mobile
 description: A Flutter audio player application for Theos Logos content
 publish_to: 'none'
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
@@ -11,8 +11,8 @@ dependencies:
     sdk: flutter
   
   # Audio player
-  just_audio: ^0.9.36
-  audio_session: ^0.1.18
+  just_audio: 0.10.6
+  audio_session: ^0.1.25
   
   # State management
   flutter_riverpod: ^2.4.9
